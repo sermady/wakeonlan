@@ -6,6 +6,7 @@ import psutil
 import time
 import subprocess
 from wakeonlan import send_magic_packet
+import concurrent.futures
 
 def normalize_mac(mac):
     # 去除所有非十六进制字符
@@ -50,6 +51,20 @@ def ping_host(ip, timeout=1, count=2):
         time.sleep(1)
     return success == count
 
+def wake_and_check(mac, ip, broadcast_ip, port, wait):
+    wake(mac, broadcast_ip, port)
+    if ip:
+        print(f"正在检测目标主机 {ip} 是否上线（最多等待{wait}秒）...")
+        for i in range(wait):
+            if ping_host(ip):
+                print(f"目标主机 {ip} 已上线，唤醒成功！")
+                break
+            time.sleep(1)
+        else:
+            print(f"目标主机 {ip} 未响应，可能未唤醒或未联网。")
+    else:
+        print("已发送唤醒包（未检测目标主机是否上线，因为未指定目标主机IP）。")
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Wake-on-LAN 脚本（支持单台和批量唤醒）")
     parser.add_argument("mac", nargs="?", default=None, help="目标主机的MAC地址（单台模式）")
@@ -57,7 +72,22 @@ if __name__ == "__main__":
     parser.add_argument("--batch", help="批量唤醒模式，指定包含MAC地址的文件路径")
     parser.add_argument("--port", type=int, default=9, help="端口号，默认9")
     parser.add_argument("--wait", type=int, default=60, help="检测目标主机上线的最大等待秒数，默认60秒")
+    parser.add_argument("--concurrent", type=int, default=20, help="批量唤醒时的最大并发数，默认20")
     args = parser.parse_args()
+
+    def wake_and_check(mac, ip, broadcast_ip, port, wait):
+        wake(mac, broadcast_ip, port)
+        if ip:
+            print(f"正在检测目标主机 {ip} 是否上线（最多等待{wait}秒）...")
+            for i in range(wait):
+                if ping_host(ip):
+                    print(f"目标主机 {ip} 已上线，唤醒成功！")
+                    break
+                time.sleep(1)
+            else:
+                print(f"目标主机 {ip} 未响应，可能未唤醒或未联网。")
+        else:
+            print("已发送唤醒包（未检测目标主机是否上线，因为未指定目标主机IP）。")
 
     try:
         local_ip, local_mask = get_local_ip_and_mask()
@@ -66,24 +96,20 @@ if __name__ == "__main__":
 
         if args.batch:
             with open(args.batch, encoding='utf-8') as f:
+                mac_ip_list = []
                 for line in f:
                     parts = line.strip().split()
                     if not parts or not parts[0]:
                         continue
                     mac = parts[0]
                     ip = parts[1] if len(parts) > 1 else None
-                    wake(mac, broadcast_ip, args.port)
-                    if ip:
-                        print(f"正在检测目标主机 {ip} 是否上线（最多等待{args.wait}秒）...")
-                        for i in range(args.wait):
-                            if ping_host(ip):
-                                print(f"目标主机 {ip} 已上线，唤醒成功！")
-                                break
-                            time.sleep(1)
-                        else:
-                            print(f"目标主机 {ip} 未响应，可能未唤醒或未联网。")
-                    else:
-                        print("已发送唤醒包（未检测目标主机是否上线，因为未指定目标主机IP）。")
+                    mac_ip_list.append((mac, ip))
+            with concurrent.futures.ThreadPoolExecutor(max_workers=args.concurrent) as executor:
+                futures = [
+                    executor.submit(wake_and_check, mac, ip, broadcast_ip, args.port, args.wait)
+                    for mac, ip in mac_ip_list
+                ]
+                concurrent.futures.wait(futures)
         elif args.mac:
             wake(args.mac, broadcast_ip, args.port)
             if args.target_ip:
