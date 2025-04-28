@@ -6,7 +6,8 @@
 - 支持单台唤醒和批量唤醒两种模式
 - 支持多种MAC地址格式
 - 可选检测目标主机是否上线（通过ping）
-- 支持自定义端口和等待时间
+- 支持自定义端口、等待时间和并发数
+- 批量唤醒时支持并发处理，大幅提升效率
 
 ## 依赖安装
 
@@ -39,7 +40,7 @@ python wakeonlan_script.py <MAC地址> <目标主机IP>
 python wakeonlan_script.py AA:BB:CC:DD:EE:FF 192.168.9.101 --wait 90
 ```
 
-### 2. 批量唤醒
+### 2. 批量唤醒（支持并发）
 
 准备一个文本文件（如`mac_list.txt`），每行一个MAC地址，后面可选填写目标主机IP（用于检测上线）：
 
@@ -53,6 +54,14 @@ AA:BB:CC:DD:EE:03
 ```bash
 python wakeonlan_script.py --batch mac_list.txt
 ```
+
+#### 并发参数
+- `--concurrent` 控制批量唤醒时的最大并发数，默认20。
+- 例如：
+  ```bash
+  python wakeonlan_script.py --batch mac_list.txt --concurrent 30
+  ```
+- 建议几十台以内可设为20~50，数量极大时请根据实际机器性能调整。
 
 ## 注意事项
 - 目标主机需开启主板/网卡的Wake-on-LAN功能。
@@ -68,6 +77,7 @@ python wakeonlan_script.py --batch mac_list.txt
 | --batch      | 批量模式，指定MAC列表文件              |
 | --port       | 唤醒包端口，默认9                      |
 | --wait       | 检测上线最大等待秒数，默认60            |
+| --concurrent | 批量唤醒时最大并发数，默认20           |
 
 ## 典型用法
 
@@ -79,9 +89,9 @@ python wakeonlan_script.py --batch mac_list.txt
   ```bash
   python wakeonlan_script.py 48:E5:33:43:5C:7A 192.168.9.101
   ```
-- 批量唤醒：
+- 批量唤醒（并发30）：
   ```bash
-  python wakeonlan_script.py --batch mac_list.txt
+  python wakeonlan_script.py --batch mac_list.txt --concurrent 30
   ```
 
 如有问题欢迎反馈！ 
